@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -32,7 +34,7 @@ ENVELOPE_TEMPLATE = """\
 version = "0.1"
 mode = "steer"                 # "audit" | "steer" | "strict"
 max_hard_blocks = 5            # Terminate proxy with exit code 42 after N consecutive blocks
-packs = ["{pack}", "core/git-hygiene"]
+packs = {packs}
 disabled_rules = []            # Rule IDs to silence locally
 emit_tape = false              # If true, writes agent-rr compatible steps into a .tape
 
@@ -135,10 +137,26 @@ def init(
     root = find_root(Path.cwd())
     envelope = root / "envelope.toml"
     if envelope.exists() and not force:
-        raise UsageError(f"{envelope} already exists (use --force to overwrite)")
-    _atomic_write(envelope, ENVELOPE_TEMPLATE.format(pack=PACKS[lang]))
+        raise UsageError(
+            f"{envelope} already exists (e.g. from `antibody pull`) and flywire already uses it; "
+            "run `flywire init --force` to replace it with the full commented template "
+            "(its packs list is kept)"
+        )
+    packs = [*_existing_packs(envelope)]
+    packs += [p for p in (PACKS[lang], "core/git-hygiene") if p not in packs]
+    _atomic_write(envelope, ENVELOPE_TEMPLATE.format(packs=json.dumps(packs)))
     _atomic_write(root / ".flywire" / ".gitignore", GITIGNORE)
     print(f"created {envelope} and {root / '.flywire' / '.gitignore'}")
+
+
+def _existing_packs(envelope: Path) -> list[str]:
+    """`envelope.packs` of the file `--force` replaces ([] if absent or unreadable)."""
+    try:
+        section = tomllib.loads(envelope.read_text()).get("envelope")
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return []
+    packs = section.get("packs") if isinstance(section, dict) else None
+    return [p for p in packs if isinstance(p, str)] if isinstance(packs, list) else []
 
 
 def _workspace() -> Config:

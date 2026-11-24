@@ -102,15 +102,26 @@ def _git(root: Path, *args: str, env: dict[str, str] | None = None) -> str:
     ).stdout.strip()
 
 
-def snapshot_tree(root: Path) -> str:
+def _tape_paths(root: Path, tape: Path | None) -> list[str]:
+    """Literal pathspecs of the tape being written and its SQLite sidecars, if inside root."""
+    if tape is None or not tape.resolve().is_relative_to(root.resolve()):
+        return []
+    rel = tape.resolve().relative_to(root.resolve()).as_posix()
+    return [f":(literal){rel}{suffix}" for suffix in ("", "-wal", "-shm", "-journal")]
+
+
+def snapshot_tree(root: Path, tape: Path | None = None) -> str:
     """§6.1: worktree -> tree SHA via a throwaway index; never touches .git/index or refs."""
     fd, index = tempfile.mkstemp()
     os.close(fd)
     os.unlink(index)
     env = {**os.environ, "GIT_INDEX_FILE": index}
+    tape_paths = _tape_paths(root, tape)
     try:
         _git(root, "read-tree", "HEAD", env=env)
         _git(root, "add", "-A", "--", ".", ":!.agent-rr", ":!.flywire", env=env)
+        if tape_paths:  # unstaged after the add: an exclude pathspec fails if git ignores it
+            _git(root, "rm", "--cached", "-q", "--ignore-unmatch", "--", *tape_paths, env=env)
         return _git(root, "write-tree", env=env)
     finally:
         for leftover in (index, index + ".lock"):
@@ -134,8 +145,9 @@ def proposed_diff(rel: str, pre: bytes, post: bytes) -> str:
 class TapeWriter:
     def __init__(self, path: Path, root: Path, argv: list[str], session_id: str) -> None:
         self.root = root
+        self.path = path
         self._lock = threading.Lock()
-        self._tree = snapshot_tree(root)  # state before the first step
+        self._tree = snapshot_tree(root, path)  # state before the first step
         path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = connect(path)
         self.conn.isolation_level = None  # explicit BEGIN IMMEDIATE transactions (D11)
@@ -210,11 +222,14 @@ class TapeWriter:
     ) -> None:
         """Run after the steer response is flushed. Nothing was applied: pre == post."""
         intent = call.intent
-        diff = ""
-        if intent and intent.target_path and intent.post_bytes is not None:
-            diff = proposed_diff(intent.target_path, intent.pre_bytes or b"", intent.post_bytes)
+        edits = intent.file_edits() if intent else ()
+        diff = "".join(
+            proposed_diff(e.target_path, e.pre_bytes, e.post_bytes)
+            for e in edits
+            if e.post_bytes is not None
+        )
         with self._lock:
-            self._tree = snapshot_tree(self.root)
+            self._tree = snapshot_tree(self.root, self.path)
             tool = (tool_name, args, call.verdict.feedback(), True, None)
             self._append(ts_start, self._tree, self._tree, diff, "steered", tool)
 
@@ -238,7 +253,7 @@ class TapeWriter:
             # ponytail: pre = tree at the end of the previous step; edits made outside
             # flywire between steps are attributed to this step. Per-call pre-snapshots
             # would add git latency in front of every forwarded call.
-            pre, post = self._tree, snapshot_tree(self.root)
+            pre, post = self._tree, snapshot_tree(self.root, self.path)
             self._tree = post
             diff = _git(self.root, "diff-tree", "-p", pre, post) + "\n" if pre != post else ""
             tool = (tool_name, args, result_text(response), is_error, exit_code)

@@ -134,3 +134,63 @@ def test_shell_classification(
     assert intent.op_class is op
     if command is not None:
         assert intent.shell_command == command
+
+
+def test_official_edits_list_applies_sequentially(tmp_path: Path) -> None:
+    write(tmp_path, "a.py", "x = 1\r\ny = 2\n")
+    edits = [{"oldText": "x = 1", "newText": "z = 1"}, {"oldText": "z = 1\ny", "newText": "q"}]
+    intent = classify("edit_file", {"path": "a.py", "edits": edits}, tmp_path)
+    assert intent.op_class is OP.FILE_WRITE and intent.post_bytes == b"q = 2\n"
+    miss = classify("edit_file", {"path": "a.py", "edits": [{"oldText": "nope"}]}, tmp_path)
+    assert miss.op_class is OP.FILE_WRITE and miss.post_bytes is None
+    dry = classify("edit_file", {"path": "a.py", "edits": edits, "dryRun": True}, tmp_path)
+    assert dry.op_class is OP.READ_ONLY
+
+
+def test_claude_code_multiedit(tmp_path: Path) -> None:
+    write(tmp_path, "a.py", "a a\nb\n")
+    edits = [
+        {"old_string": "a", "new_string": "c", "replace_all": True},
+        {"old_string": "b", "new_string": "d"},
+    ]
+    intent = classify("MultiEdit", {"file_path": "a.py", "edits": edits}, tmp_path)
+    assert intent.post_bytes == b"c c\nd\n"
+
+
+def test_move_file_mutates_source_and_destination(tmp_path: Path) -> None:
+    write(tmp_path, "tests/test_a.py", "assert 1\n")
+    intent = classify("move_file", {"source": "tests/test_a.py", "destination": "b.py"}, tmp_path)
+    assert intent.op_class is OP.FILE_WRITE
+    assert [(e.target_path, e.pre_bytes, e.post_bytes) for e in intent.file_edits()] == [
+        ("tests/test_a.py", b"assert 1\n", b""),
+        ("b.py", b"", b"assert 1\n"),
+    ]
+    with pytest.raises(PathTraversalError):
+        classify("move_file", {"source": "b.py", "destination": "../x.py"}, tmp_path)
+
+
+def test_unknown_mutating_tool_with_a_path_is_a_write(tmp_path: Path) -> None:
+    write(tmp_path, "tests/test_a.py", "assert 1\n")
+    intent = classify("delete_file", {"path": "tests/test_a.py"}, tmp_path)
+    assert intent.op_class is OP.FILE_WRITE
+    assert (intent.target_path, intent.post_bytes) == ("tests/test_a.py", None)
+    folder = classify("remove_directory", {"path": "tests"}, tmp_path)
+    assert [(e.target_path, e.post_bytes) for e in folder.file_edits()] == [
+        ("tests/test_a.py", None)
+    ]
+    mkdir = classify("create_directory", {"path": "tests"}, tmp_path)
+    assert mkdir.op_class is OP.FILE_WRITE and mkdir.file_edits() == ()
+    with pytest.raises(PathTraversalError):
+        classify("create_directory", {"path": "/etc/x"}, tmp_path)
+    assert classify("get_file_info", {"path": "/etc/x"}, tmp_path).op_class is OP.READ_ONLY
+
+
+def test_multi_file_patch_is_evaluated_per_file(tmp_path: Path) -> None:
+    write(tmp_path, "src/m.py", "a\nb\nc\nd\ne\nf\n-- dashed\n")
+    write(tmp_path, "other.py", "x\n")
+    two_files = DIFF + "--- a/other.py\n+++ b/other.py\n@@ -1 +1 @@\n-x\n+y\n"
+    intent = classify("apply_patch", {"patch": two_files}, tmp_path)
+    assert [(e.target_path, e.post_bytes) for e in intent.file_edits()] == [
+        ("src/m.py", b"a\nB\nc\nd\ne\nf\ng\nh\n"),
+        ("other.py", b"y\n"),
+    ]

@@ -22,7 +22,7 @@ AUTH_TEST = "def test_login():\n    assert a()\n    assert b()\n    assert c()\n
 class Wrapped:
     """A real `flywire wrap -- python mock_mcp_server.py` process on real pipes."""
 
-    def __init__(self, root: Path, *flags: str) -> None:
+    def __init__(self, root: Path, *flags: str, server: str = MOCK) -> None:
         self.root = root
         self.log, self.out, self.pidfile = root / "mock.log", root / "mock.out", root / "mock.pid"
         env = {
@@ -33,7 +33,7 @@ class Wrapped:
             "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
         }
         self.proc = subprocess.Popen(
-            [FLYWIRE, "wrap", *flags, "--", sys.executable, MOCK],
+            [FLYWIRE, "wrap", *flags, "--", sys.executable, server],
             cwd=root,
             env=env,
             stdin=subprocess.PIPE,

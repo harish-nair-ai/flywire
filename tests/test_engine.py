@@ -136,3 +136,19 @@ def test_feedback_text_for_ast_violation(make_engine: Factory, tmp_path: Path) -
         "(`# noqa` / `# type: ignore`) was added.\n"
         "Action required: Fix the underlying lint or type error instead of suppressing it."
     )
+
+
+def test_unverifiable_edit_steers_only_on_ast_guarded_files(make_engine: Factory) -> None:
+    engine = make_engine()
+    write(engine.root, "tests/test_a.py", "def test_a():\n    assert 1\n")
+    write(engine.root, "notes.txt", "hi\n")
+    guarded = engine.evaluate("delete_file", {"path": "tests/test_a.py"})
+    assert (guarded.action, guarded.rule_id) == ("STEER", "scope-unverifiable-edit")
+    assert engine.evaluate("delete_file", {"path": "notes.txt"}).action == "ALLOW"
+    claude = engine.evaluate(
+        "Edit", {"file_path": "tests/test_a.py", "old_string": "assert 1", "new_string": "pass"}
+    )
+    assert claude.rule_id == "py-no-deleted-assertions"
+    gutted = "def test_a():\n    pass\n"
+    full = engine.evaluate("Write", {"file_path": "tests/test_a.py", "content": gutted})
+    assert full.rule_id == "py-no-deleted-assertions"

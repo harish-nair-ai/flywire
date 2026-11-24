@@ -125,21 +125,32 @@ def _counts(query: Query, parsed: _Parsed) -> dict[str, int]:
     return parsed.counts[query]
 
 
-def evaluate_ast(
-    rules: Iterable[CompiledAstRule], rel_path: str, pre: bytes, post: bytes
-) -> Verdict | None:
-    """First violated rule (load order) for this pre->post edit, else None."""
+def _applicable(
+    rules: Iterable[CompiledAstRule], rel_path: str
+) -> tuple[str | None, list[CompiledAstRule]]:
     grammar = EXT_TO_LANG.get(PurePosixPath(rel_path).suffix)
     if grammar is None:
-        return None
-    applicable = [
+        return None, []
+    return grammar, [
         r
         for r in rules
         if grammar in r.queries
         and r.include.match_file(rel_path)
         and not r.exclude.match_file(rel_path)
     ]
-    if not applicable:
+
+
+def is_guarded(rules: Iterable[CompiledAstRule], rel_path: str) -> bool:
+    """Whether any AST rule applies to `rel_path`."""
+    return bool(_applicable(rules, rel_path)[1])
+
+
+def evaluate_ast(
+    rules: Iterable[CompiledAstRule], rel_path: str, pre: bytes, post: bytes
+) -> Verdict | None:
+    """First violated rule (load order) for this pre->post edit, else None."""
+    grammar, applicable = _applicable(rules, rel_path)
+    if grammar is None or not applicable:
         return None
     pre_p = _parse(grammar, pre)
     post_p = _parse(grammar, post)

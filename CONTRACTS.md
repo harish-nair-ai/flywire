@@ -112,7 +112,7 @@ antibody starter packs (18): `core/python-safety` (7 = the 5 py above + `py-no-s
 `core/typescript-safety` (6 = the 5 ts above + `ts-no-empty-catch`), `core/git-hygiene` (5 = sh-* above minus `sh-no-env-exfil`).
 Pack rules with the same id as a built-in **override** it (later source wins), so semantics must match the built-in or be strictly better.
 
-Engine-generated rule ids (flywire, not TOML): `scope-path-traversal` (HARD_BLOCK), `scope-protected-path`, `scope-mass-deletion`, `scope-blast-radius`, `stall-loop-detected`, `victory-unverified-commit` (all STEER by default).
+Engine-generated rule ids (flywire, not TOML): `scope-path-traversal` (HARD_BLOCK), `scope-protected-path`, `scope-mass-deletion`, `scope-blast-radius`, `scope-unverifiable-edit` (a mutating call on an AST-guarded file whose post-bytes cannot be reconstructed), `stall-loop-detected`, `victory-unverified-commit` (all STEER by default).
 
 **DEVIATION (D5) `sh-no-skip-hooks`:** match `--no-verify` on `git commit`/`git push`, and `-n` (incl. bundled short flags like `-nm`) on `git commit` only. `git push -n` is `--dry-run`, not hook-skipping.
 **`sh-no-force-push`:** blocks `git push` with `--force`, `-f`, or `--force-with-lease` (incl. `+refspec`) when the unit names `main` or `master` (implicit current branch is out of scope for v0.1).
@@ -268,10 +268,11 @@ tmp_idx = mkstemp(dir=tempfile.gettempdir()); os.close; os.unlink   # fresh inde
 env = {**os.environ, "GIT_INDEX_FILE": tmp_idx}
 git read-tree HEAD                                  (env)
 git add -A -- . ':!.agent-rr' ':!.flywire'          (env)
+[T] git rm --cached -q --ignore-unmatch -- <tape pathspecs>   (env)
 sha = git write-tree                                (env)  -> 40-hex
 finally: unlink tmp_idx (and tmp_idx + ".lock" if present)
 ```
-Never touches `.git/index`, HEAD, or refs. Repo with no commits → actionable error (`error: repository has no commits; make an initial commit first`, exit 2).
+`[T]`: only when the tape being written lies inside the repo; pathspecs `':(literal)<rel>'` for `<rel>` and `<rel>-wal`/`-shm`/`-journal` (the tape must never snapshot itself; an exclude pathspec would make `git add` fail when the tape path is gitignored). Never touches `.git/index`, HEAD, or refs. Repo with no commits → actionable error (`error: repository has no commits; make an initial commit first`, exit 2).
 
 ### 6.2 flywire tape emission (`emit_tape = true`)
 - Tape path: `$AGENT_RR_TAPE_PATH` if set, else `<root>/.flywire/tapes/<session_id>.tape`. Meta (if new): `command_argv` = wrapped upstream argv, `metadata_json={"producer":"flywire","session_id":...}`.

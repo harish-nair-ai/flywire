@@ -125,14 +125,30 @@ class EnvelopeFile(Frozen):
     shell_rules: tuple[ShellRule, ...] = ()
 
 
+class FileEdit(Frozen):
+    """One file's shadowed change; `post_bytes=None` = the result cannot be reconstructed."""
+
+    target_path: str
+    pre_bytes: bytes
+    post_bytes: bytes | None
+
+
 class ToolCallIntent(Frozen):
     op_class: OperationClass
     tool_name: str
-    target_path: str | None = None
-    pre_bytes: bytes | None = None
+    target_path: str | None = None  # the tool's path argument (logged, stall-tracked)
+    pre_bytes: bytes | None = None  # set when the call edits exactly `target_path`
     post_bytes: bytes | None = None
+    extra_edits: tuple[FileEdit, ...] = ()  # multi-file calls: move, directories, patches
     shell_command: str | None = None
     raw_args: dict[str, Any]
+
+    def file_edits(self) -> tuple[FileEdit, ...]:
+        """Every file this call changes, for the guards."""
+        if self.target_path is None or self.pre_bytes is None:
+            return self.extra_edits
+        return (FileEdit(target_path=self.target_path, pre_bytes=self.pre_bytes,
+                         post_bytes=self.post_bytes), *self.extra_edits)  # fmt: skip
 
 
 class ToolResult(Frozen):

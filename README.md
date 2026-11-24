@@ -236,7 +236,7 @@ packs: core/python-safety (not installed), core/git-hygiene (not installed)
 no interventions recorded
 ```
 
-The starter `envelope.toml` lists two antibody packs. They are optional: flywire warns and runs with its 16 built-in rules. (`antibody pull core/python-safety` installs them; see [antibody](https://github.com/harish-nair-ai/antibody).)
+Run `flywire init` before `antibody pull`: if a pull already created a minimal `envelope.toml`, `init` exits 2 and tells you to run `flywire init --force`, which keeps the pulled packs. The starter `envelope.toml` lists two antibody packs. They are optional: flywire warns and runs with its 16 built-in rules. (`antibody pull core/python-safety` installs them; see [antibody](https://github.com/harish-nair-ai/antibody).)
 
 **4. Send three calls**: one that deletes the assertions, one harmless edit, and one `curl | sh`.
 
@@ -297,7 +297,7 @@ All commands find the workspace root by walking up from the current directory to
 
 ### `flywire init [--lang python|ts] [--force]`
 
-Writes a commented starter `envelope.toml` (the full file is shown in the [config reference](#configuration-reference-envelopetoml)) and `.flywire/.gitignore` (ignores `flight_log.db*`, `tapes/`, `.tmp/`). `--lang ts` lists `core/typescript-safety` instead of `core/python-safety`. Refuses to overwrite an existing `envelope.toml` (exit 2) unless `--force` is given.
+Writes a commented starter `envelope.toml` (the full file is shown in the [config reference](#configuration-reference-envelopetoml)) and `.flywire/.gitignore` (ignores `flight_log.db*`, `tapes/`, `.tmp/`). `--lang ts` lists `core/typescript-safety` instead of `core/python-safety`. Refuses to overwrite an existing `envelope.toml` (exit 2) unless `--force` is given. `--force` keeps the `packs` already listed in the old file, so running `flywire init --force` after `antibody pull` (which creates a minimal `envelope.toml`) loses nothing.
 
 ### `flywire wrap [--mode audit|steer|strict] -- <cmd...>`
 
@@ -350,20 +350,23 @@ import subprocess
 from pathlib import Path
 import flywire
 
+
 @flywire.guard
 def write_file(path: str, content: str) -> str:
     Path(path).write_text(content)
     return "ok"
 
+
 @flywire.guard
 def bash(command: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, shell=True, capture_output=True, text=True)
 
+
 try:
     bash("git push --force origin main")
 except flywire.SteeringError as exc:
-    print(exc)          # agent-facing text
-    exc.verdict         # Verdict(action=..., rule_id=..., reason=..., remediation=...)
+    print(exc)  # agent-facing text
+    exc.verdict  # Verdict(action=..., rule_id=..., reason=..., remediation=...)
 ```
 
 Run from inside the demo repo above, this sequence (edit `src/calc.py`, `git commit -am wip` without running tests, a second edit, a revert to the first version, a third edit) produced these verdicts:
@@ -384,10 +387,25 @@ flywire does not need a schema for your tools. It looks at argument names:
 |---|---|---|
 | `command` or `cmd` (string or list of strings) | `SHELL_EXEC`, or `GIT_MUTATE` if any unit starts with `git commit/push/reset/checkout/rebase` | shell rules, stall detector, victory gate |
 | a tool whose name matches `bash\|shell\|exec\|command\|terminal\|run` and that has exactly one string argument | same as above | same |
-| `content` / `file_text`, or `old_str`+`new_str` / `old_string`+`new_string` (plus `replace_all`), or `patch` / `diff` | `FILE_WRITE` | scope guard, AST rules, stall detector |
+| `content` / `file_text`, `edits` (a list, applied in order), `oldText`+`newText` / `old_str`+`new_str` / `old_string`+`new_string` (plus `replace_all`), or `patch` / `diff` | `FILE_WRITE` | scope guard, AST rules, stall detector |
+| `"dryRun": true` | `READ_ONLY` | nothing (a preview writes nothing) |
+| a tool whose name looks mutating (`write`, `edit`, `create`, `delete`, `remove`, `move`, `rename`, `patch`, `replace`, `insert`, `append`, `apply`, `update`, `save`, `mkdir`, `unlink`, `copy`, `truncate`, `modify`) with a path argument but none of the above | `FILE_WRITE` | see the conservative policy below |
 | anything else | `READ_ONLY` | nothing; ALLOW immediately |
 
-The target path comes from `path`, `file_path`, `filepath`, `filename` or `target_file`, or from the `+++` header of a single-file diff. A path that resolves outside the workspace root is a HARD_BLOCK (`scope-path-traversal`).
+The target path comes from `path`, `file_path`, `filepath`, `filename` or `target_file`, or from the `+++`/`---` headers of a diff (a multi-file diff is checked file by file). A path that resolves outside the workspace root is a HARD_BLOCK (`scope-path-traversal`).
+
+Shapes understood exactly:
+
+| Tool shape | Post-edit content flywire evaluates |
+|---|---|
+| official filesystem server `edit_file(path, edits=[{oldText, newText}], dryRun)` | each edit replaces the first exact occurrence (CRLF normalized), in order |
+| official `write_file(path, content)`, Claude Code `Write(file_path, content)` | `content` |
+| Claude Code `Edit(file_path, old_string, new_string, replace_all)` | the replacement |
+| Claude Code `MultiEdit(file_path, edits=[{old_string, new_string, replace_all}])` | each edit, in order |
+| official `move_file(source, destination)` | two edits: every source file deleted, and created with the same bytes at the destination (directories expanded file by file) |
+| official `create_directory(path)` | no file content; path still traversal-checked |
+
+**Conservative policy for edits flywire cannot reconstruct.** If a call mutates a file that an AST rule guards (for example `tests/test_*.py`) and flywire cannot compute the file's new content (an unknown mutating tool such as `delete_file`, a `remove_directory` over a test folder, an `oldText` that does not match the file exactly, a patch that does not apply), the call is STEERed with `scope-unverifiable-edit` instead of being allowed unchecked. The agent is told to send the full content or an exact match. Files no AST rule covers are allowed as before.
 
 ## Configuration reference: `envelope.toml`
 
@@ -587,18 +605,19 @@ Known limitations in v0.1, found while writing this README or documented in the 
 
 - **Latency depends on the machine.** The 15 ms p99 test measures wall-clock time and can fail on a heavily loaded CI runner even when nothing is wrong. Numbers above are from an idle laptop.
 - **One finding per file.** The AST guard returns the first violated rule for a file. If an edit adds both `shell=True` and `except: pass`, you see one of them, fix it, then see the other.
-- **Multi-file patches are not AST-checked.** A `patch` argument that touches several files has no single target, so only the stall detector applies to it.
+- **Renaming a guarded test file is steered.** `move_file` counts as deleting the source, so moving `tests/test_a.py` to `tests/test_b.py` trips `py-no-deleted-assertions`.
+- **Whitespace-tolerant matches are steered.** The official server falls back to a whitespace-insensitive line match when `oldText` is not found exactly; flywire does not replicate that, so such an edit on a guarded file gets `scope-unverifiable-edit`.
 - **Batched JSON-RPC requests containing `tools/call` are rejected** with `-32600`. Clients on MCP 2025-06-18 or later do not send batches.
 - **`wrap` needs pipes on stdin and stdout.** Redirecting a regular file in or out fails (see the `wrap` section).
 - **Exit code 42 is stdio-only.** `serve` blocks the calls but has no equivalent of terminating after `max_hard_blocks`.
 - **Tape diffs assume one call at a time.** The pre-tree of an allowed step is the tree at the end of the previous step. If a client pipelines several calls without waiting for replies, a steered step's snapshot can absorb an in-flight allowed edit, and the allowed step is then recorded with an empty diff. Sequential calls (the normal agent loop) record correctly. Edits made outside flywire between steps are attributed to the next step.
 - **`sh-no-force-push` only looks for `main`/`master` in the command.** A bare `git push --force` on a checked-out `main` is not caught.
 - **Shell rules are regexes over command text.** Obfuscation (`eval "$(echo … | base64 -d)"`, aliases, scripts written to disk and then run) is out of scope.
-- **Classification is heuristic.** It relies on argument names (`path`, `content`, `command`, …). A tool with unusual argument names is treated as READ_ONLY.
+- **Classification is heuristic.** It relies on argument names (`path`, `content`, `command`, …) and mutating-looking tool names. A tool with neither a recognized content argument nor a mutating-looking name is treated as READ_ONLY.
 
 Contract deviations (D1 to D9, documented in `CONTRACTS.md`) that change spec behavior: rule TOML keys were defined (D1), `typescript` rules cover `.tsx` (D2), parse errors on either side skip the rule (D3), shell commands are split into units before matching (D4), `git push -n` is not hook skipping (D5), `use_builtin_rules` was added (D6), missing packs are warnings (D7), the victory gate also checks for interventions after the last pass (D8), and tool result extraction rules were pinned (D9).
 
-Possible next steps: an HTTP equivalent of `max_hard_blocks`, reporting all AST findings per file in `check`, and per-file AST checks for multi-file patches.
+Possible next steps: an HTTP equivalent of `max_hard_blocks`, and reporting all AST findings per file in `check`.
 
 ## Development
 
