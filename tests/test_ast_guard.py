@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from conftest import write
 from tree_sitter import Parser, Query, QueryCursor
 
 from flywire.config import load_config
+from flywire.engine import EnvelopeEngine
 from flywire.guards.ast_guard import LANG_REGISTRY, CompiledAstRule, evaluate_ast
 
 AUTH_TEST = b"""def test_login():
@@ -193,3 +196,33 @@ def test_exclude_paths(tmp_path: Path) -> None:
     verdict = evaluate_ast(rules, "src/a.py", b"", b"print(1)\n")
     assert verdict is not None and verdict.action == "HARD_BLOCK"
     assert evaluate_ast(rules, "scripts/a.py", b"", b"print(1)\n") is None
+
+
+# --- spec §8 acceptance through the full engine (classifier + shadow patch + SQLite) ----
+
+
+def test_engine_acceptance_deleted_assert(make_engine: Callable[..., EnvelopeEngine]) -> None:
+    engine = make_engine()
+    write(engine.root, "tests/test_auth.py", AUTH_TEST.decode())
+    verdict = engine.evaluate(
+        "str_replace_editor",
+        {"path": "tests/test_auth.py", "old_str": "    assert token() is not None\n", "new_str": ""},
+    )
+    assert (verdict.action, verdict.rule_id) == ("STEER", "py-no-deleted-assertions")
+
+
+def test_engine_acceptance_legacy_noqa(make_engine: Callable[..., EnvelopeEngine]) -> None:
+    engine = make_engine()
+    write(engine.root, "src/legacy.py", "import os  # noqa\nimport sys  # noqa\n")
+    args = {"path": "src/legacy.py", "old_str": "import sys  # noqa\n"}
+    added_fn = {**args, "new_str": "import sys  # noqa\n\n\ndef added():\n    return 1\n"}
+    assert engine.evaluate("edit_file", added_fn).action == "ALLOW"
+    third = {**args, "new_str": "import sys  # noqa\nimport re  # noqa\n"}
+    assert engine.evaluate("edit_file", third).rule_id == "py-no-lint-suppression"
+
+
+def test_engine_acceptance_broken_syntax(make_engine: Callable[..., EnvelopeEngine]) -> None:
+    engine = make_engine()
+    write(engine.root, "tests/test_auth.py", AUTH_TEST.decode())
+    broken = {"path": "tests/test_auth.py", "content": "def test_login(:\n"}
+    assert engine.evaluate("write_file", broken).action == "ALLOW"
