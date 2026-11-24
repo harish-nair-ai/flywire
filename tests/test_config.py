@@ -105,6 +105,7 @@ def test_typescript_rules_compile_for_both_grammars(tmp_path: Path) -> None:
             "id",
         ),
         ("[envelope]\npacks = ['not-a-pack-id']\n", "packs"),
+        ("[victory_gate]\ntest_command_patterns = ['(']\n", "test_command_patterns"),
     ],
 )
 def test_invalid_config_fails_fast(tmp_path: Path, body: str, needle: str) -> None:

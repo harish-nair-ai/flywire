@@ -11,9 +11,9 @@ Factory = Callable[..., EnvelopeEngine]
 
 def test_commit_after_edit_steers_until_tests_pass(make_engine: Factory) -> None:
     engine = make_engine()
-    assert write_call(engine, "src/calc.py", "def add(a, b):\n    return a + b\n").verdict.action == (
-        "ALLOW"
-    )
+    assert write_call(
+        engine, "src/calc.py", "def add(a, b):\n    return a + b\n"
+    ).verdict.action == ("ALLOW")
     blocked = shell_call(engine, 'git commit -m "fix"')
     assert (blocked.action, blocked.rule_id, blocked.engine) == (
         "STEER",
@@ -32,7 +32,9 @@ def test_failing_tests_do_not_unlock_commit(make_engine: Factory) -> None:
     engine = make_engine()
     write_call(engine, "src/calc.py", "x = 1\n")
     shell_call(engine, "uv run pytest -q", exit_code=1)
-    assert shell_call(engine, "git add -A && git commit -m x").rule_id == "victory-unverified-commit"
+    assert (
+        shell_call(engine, "git add -A && git commit -m x").rule_id == "victory-unverified-commit"
+    )
 
 
 def test_compound_test_command_counts(make_engine: Factory) -> None:

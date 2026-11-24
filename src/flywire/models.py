@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 VerdictAction = Literal["ALLOW", "STEER", "HARD_BLOCK"]
 Mode = Literal["audit", "steer", "strict"]
@@ -103,6 +104,16 @@ class VictorySection(Frozen):
     )
     block_commit_without_pass: bool = True
     require_clean_check_before_commit: bool = True
+
+    @field_validator("test_command_patterns")
+    @classmethod
+    def _compiles(cls, patterns: tuple[str, ...]) -> tuple[str, ...]:
+        for p in patterns:
+            try:
+                re.compile(p)
+            except re.error as exc:  # not a ValueError, so pydantic would not wrap it
+                raise ValueError(f"invalid regex {p!r}: {exc}") from exc
+        return patterns
 
 
 class EnvelopeFile(Frozen):

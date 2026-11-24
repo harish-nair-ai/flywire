@@ -61,7 +61,9 @@ def write_call(engine: EnvelopeEngine, rel: str, text: str) -> Interception:
     return call
 
 
-def shell_call(engine: EnvelopeEngine, command: str, exit_code: int = 0, passed: int = 0) -> Verdict:
+def shell_call(
+    engine: EnvelopeEngine, command: str, exit_code: int = 0, passed: int = 0
+) -> Verdict:
     call = engine.intercept("bash", {"command": command})
     if call.verdict.action == "ALLOW":
         engine.record_result(call, ToolResult(exit_code=exit_code, passed_count=passed))

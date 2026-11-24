@@ -45,10 +45,14 @@ def test_schema_exact_and_clean_close(tmp_path: Path) -> None:
 
     raw = sqlite3.connect(path)
     names = {
-        r[0]
-        for r in raw.execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+        r[0] for r in raw.execute("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
     }
-    assert names == {"sessions", "tool_events", "idx_events_session_step", "idx_events_session_path"}
+    assert names == {
+        "sessions",
+        "tool_events",
+        "idx_events_session_step",
+        "idx_events_session_path",
+    }
     cols = [r[1] for r in raw.execute("PRAGMA table_info(tool_events)")]
     assert cols == [
         "id", "session_id", "step_idx", "ts", "tool_name", "op_class", "target_path",

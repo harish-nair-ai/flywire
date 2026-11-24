@@ -70,7 +70,9 @@ def test_lines_deleted_counts_removed_lines_not_moves() -> None:
 def test_mass_deletion(make_engine: Factory) -> None:
     engine = make_engine("[scope]\nmax_lines_deleted_per_turn = 3\n")
     write(engine.root, "src/big.py", "".join(f"x{i} = {i}\n" for i in range(10)))
-    ok = engine.evaluate("edit", {"path": "src/big.py", "old_str": "x0 = 0\nx1 = 1\n", "new_str": ""})
+    ok = engine.evaluate(
+        "edit", {"path": "src/big.py", "old_str": "x0 = 0\nx1 = 1\n", "new_str": ""}
+    )
     assert ok.action == "ALLOW"
     verdict = engine.evaluate("write_file", {"path": "src/big.py", "content": "x0 = 0\n"})
     assert (verdict.action, verdict.rule_id) == ("STEER", "scope-mass-deletion")

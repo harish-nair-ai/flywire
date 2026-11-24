@@ -206,7 +206,11 @@ def test_engine_acceptance_deleted_assert(make_engine: Callable[..., EnvelopeEng
     write(engine.root, "tests/test_auth.py", AUTH_TEST.decode())
     verdict = engine.evaluate(
         "str_replace_editor",
-        {"path": "tests/test_auth.py", "old_str": "    assert token() is not None\n", "new_str": ""},
+        {
+            "path": "tests/test_auth.py",
+            "old_str": "    assert token() is not None\n",
+            "new_str": "",
+        },
     )
     assert (verdict.action, verdict.rule_id) == ("STEER", "py-no-deleted-assertions")
 

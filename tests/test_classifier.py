@@ -16,7 +16,11 @@ def test_full_write_existing_and_new(tmp_path: Path) -> None:
     write(tmp_path, "src/a.py", "old\n")
     intent = classify("write_file", {"path": "src/a.py", "content": "new\n"}, tmp_path)
     assert intent.op_class is OP.FILE_WRITE
-    assert (intent.target_path, intent.pre_bytes, intent.post_bytes) == ("src/a.py", b"old\n", b"new\n")
+    assert (intent.target_path, intent.pre_bytes, intent.post_bytes) == (
+        "src/a.py",
+        b"old\n",
+        b"new\n",
+    )
     created = classify("create_file", {"file_path": "./pkg/../b.py", "file_text": "x"}, tmp_path)
     assert (created.target_path, created.pre_bytes, created.post_bytes) == ("b.py", b"", b"x")
 
