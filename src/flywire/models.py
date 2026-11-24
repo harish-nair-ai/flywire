@@ -12,6 +12,7 @@ Mode = Literal["audit", "steer", "strict"]
 Severity = Literal["steer", "hard_block"]
 RuleId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9-]*$")]
 PackId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*$")]
+SEVERITY_ACTION: dict[str, VerdictAction] = {"steer": "STEER", "hard_block": "HARD_BLOCK"}
 
 
 class OperationClass(StrEnum):
@@ -66,7 +67,7 @@ class RuleFile(Frozen):
 class EnvelopeSection(Frozen):
     version: str = "0.1"
     mode: Mode = "steer"
-    max_hard_blocks: int = Field(5, ge=1)
+    max_hard_blocks: int = Field(default=5, ge=1)
     packs: tuple[PackId, ...] = ()
     disabled_rules: tuple[str, ...] = ()
     emit_tape: bool = False
@@ -74,16 +75,16 @@ class EnvelopeSection(Frozen):
 
 
 class ScopeSection(Frozen):
-    max_files_modified: int = Field(15, ge=1)
-    max_lines_deleted_per_turn: int = Field(150, ge=0)
+    max_files_modified: int = Field(default=15, ge=1)
+    max_lines_deleted_per_turn: int = Field(default=150, ge=0)
     protected_paths: tuple[str, ...] = (".github/workflows/**", "migrations/**", "*.lock", ".env*")
 
 
 class StallSection(Frozen):
     enabled: bool = True
-    window_size: int = Field(5, ge=2)
-    max_semantic_repeats: int = Field(3, ge=2)
-    max_consecutive_tool_errors: int = Field(3, ge=1)
+    window_size: int = Field(default=5, ge=2)
+    max_semantic_repeats: int = Field(default=3, ge=2)
+    max_consecutive_tool_errors: int = Field(default=3, ge=1)
     detect_ab_oscillation: bool = True
     steer_message: str = (
         "Repair loop detected. Stop editing, read the full error output, "

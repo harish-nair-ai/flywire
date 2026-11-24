@@ -39,7 +39,7 @@ def test_predicates_are_applied_by_query_cursor() -> None:
 
 
 def test_deleting_one_of_three_asserts_steers(rules: tuple[CompiledAstRule, ...]) -> None:
-    post = AUTH_TEST.replace(b'    assert token() is not None\n', b"")
+    post = AUTH_TEST.replace(b"    assert token() is not None\n", b"")
     verdict = evaluate_ast(rules, "tests/test_auth.py", AUTH_TEST, post)
     assert verdict is not None
     assert (verdict.action, verdict.rule_id) == ("STEER", "py-no-deleted-assertions")
@@ -93,7 +93,8 @@ CASES = [
         "src/app.py",
         b"def f():\n    return g()\n",
         b"def f():\n    try:\n        return g()\n    except Exception:\n        pass\n",
-        b"def f():\n    try:\n        return g()\n    except Exception:\n        log()\n        raise\n",
+        b"def f():\n    try:\n        return g()\n    except Exception:\n"
+        b"        log()\n        raise\n",
     ),
     (
         "py-no-ssl-verify-false",

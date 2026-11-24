@@ -127,16 +127,12 @@ NEGATIVE = {
 }
 
 
-@pytest.mark.parametrize(
-    "rule_id, cmd", [(r, c) for r, cmds in POSITIVE.items() for c in cmds]
-)
+@pytest.mark.parametrize("rule_id, cmd", [(r, c) for r, cmds in POSITIVE.items() for c in cmds])
 def test_rule_fires(rules: tuple[CompiledShellRule, ...], rule_id: str, cmd: str) -> None:
     assert fired(rules, cmd) == rule_id
 
 
-@pytest.mark.parametrize(
-    "rule_id, cmd", [(r, c) for r, cmds in NEGATIVE.items() for c in cmds]
-)
+@pytest.mark.parametrize("rule_id, cmd", [(r, c) for r, cmds in NEGATIVE.items() for c in cmds])
 def test_rule_does_not_fire(rules: tuple[CompiledShellRule, ...], rule_id: str, cmd: str) -> None:
     assert fired(rules, cmd) is None
 
