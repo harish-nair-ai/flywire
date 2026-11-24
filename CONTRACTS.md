@@ -112,7 +112,7 @@ antibody starter packs (18): `core/python-safety` (7 = the 5 py above + `py-no-s
 `core/typescript-safety` (6 = the 5 ts above + `ts-no-empty-catch`), `core/git-hygiene` (5 = sh-* above minus `sh-no-env-exfil`).
 Pack rules with the same id as a built-in **override** it (later source wins), so semantics must match the built-in or be strictly better.
 
-Engine-generated rule ids (flywire, not TOML): `scope-path-traversal` (HARD_BLOCK), `scope-protected-path`, `scope-mass-deletion`, `scope-blast-radius`, `stall-loop-detected`, `victory-unverified-commit` (all STEER by default).
+Engine-generated rule ids (flywire, not TOML): `scope-path-traversal` (HARD_BLOCK), `scope-protected-path`, `scope-mass-deletion`, `scope-blast-radius`, `scope-unverifiable-edit` (a mutating call on an AST-guarded file whose post-bytes cannot be reconstructed), `stall-loop-detected`, `victory-unverified-commit` (all STEER by default).
 
 **DEVIATION (D5) `sh-no-skip-hooks`:** match `--no-verify` on `git commit`/`git push`, and `-n` (incl. bundled short flags like `-nm`) on `git commit` only. `git push -n` is `--dry-run`, not hook-skipping.
 **`sh-no-force-push`:** blocks `git push` with `--force`, `-f`, or `--force-with-lease` (incl. `+refspec`) when the unit names `main` or `master` (implicit current branch is out of scope for v0.1).

@@ -210,9 +210,12 @@ class TapeWriter:
     ) -> None:
         """Run after the steer response is flushed. Nothing was applied: pre == post."""
         intent = call.intent
-        diff = ""
-        if intent and intent.target_path and intent.post_bytes is not None:
-            diff = proposed_diff(intent.target_path, intent.pre_bytes or b"", intent.post_bytes)
+        edits = intent.file_edits() if intent else ()
+        diff = "".join(
+            proposed_diff(e.target_path, e.pre_bytes, e.post_bytes)
+            for e in edits
+            if e.post_bytes is not None
+        )
         with self._lock:
             self._tree = snapshot_tree(self.root)
             tool = (tool_name, args, call.verdict.feedback(), True, None)

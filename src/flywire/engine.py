@@ -16,7 +16,7 @@ from typing import Any
 from flywire.classifier import PathTraversalError, classify
 from flywire.config import Config
 from flywire.guards import scope_guard, stall_detector, victory_gate
-from flywire.guards.ast_guard import evaluate_ast, gitwildmatch
+from flywire.guards.ast_guard import evaluate_ast, gitwildmatch, is_guarded
 from flywire.guards.shell_guard import evaluate_shell, shell_units
 from flywire.models import Mode, OperationClass, ToolCallIntent, ToolResult, Verdict, VerdictAction
 from flywire.store.flight_db import FlightDB
@@ -111,16 +111,22 @@ class EnvelopeEngine:
         env = self.config.envelope
         rel = intent.target_path
         if intent.op_class is WRITE:
-            if rel is not None and intent.pre_bytes is not None:
-                yield scope_guard.protected_path(self._protected, rel)
-                if intent.post_bytes is not None:
-                    deleted = scope_guard.lines_deleted(intent.pre_bytes, intent.post_bytes)
+            edits = intent.file_edits()
+            for e in edits:
+                yield scope_guard.protected_path(self._protected, e.target_path)
+                if e.post_bytes is None:
+                    if is_guarded(self.config.ast_rules, e.target_path):
+                        yield scope_guard.unverifiable_edit(e.target_path)
+                else:
+                    deleted = scope_guard.lines_deleted(e.pre_bytes, e.post_bytes)
                     yield scope_guard.mass_deletion(deleted, env.scope.max_lines_deleted_per_turn)
-                distinct = len(self._modified | {rel})
+            if edits:
+                distinct = len(self._modified | {e.target_path for e in edits})
                 yield scope_guard.blast_radius(distinct, env.scope.max_files_modified)
-                if intent.post_bytes is not None:
+            for e in edits:
+                if e.post_bytes is not None:
                     yield evaluate_ast(
-                        self.config.ast_rules, rel, intent.pre_bytes, intent.post_bytes
+                        self.config.ast_rules, e.target_path, e.pre_bytes, e.post_bytes
                     )
         else:
             yield evaluate_shell(self.config.shell_rules, units)
@@ -187,8 +193,8 @@ class EnvelopeEngine:
             args_json=json.dumps(args, sort_keys=True, default=repr),
         )
         self._step += 1
-        if action == "ALLOW" and intent and intent.op_class is WRITE and intent.target_path:
-            self._modified.add(intent.target_path)
+        if action == "ALLOW" and intent and intent.op_class is WRITE and intent.file_edits():
+            self._modified.update(e.target_path for e in intent.file_edits())
             self.db.set_code_edit(self.session_id, ts)
         hard_blocks = (
             self._hard_blocks + 1 if action == "HARD_BLOCK" else 0 if action == "ALLOW" else None

@@ -62,3 +62,13 @@ def blast_radius(distinct_files: int, limit: int) -> Verdict | None:
         f"This change modifies {distinct_files} distinct files (limit {limit}).",
         "Finish and verify the current change before touching more files.",
     )
+
+
+def unverifiable_edit(rel_path: str) -> Verdict:
+    return _steer(
+        "scope-unverifiable-edit",
+        f"flywire cannot reconstruct the result of this call on '{rel_path}', "
+        "a file guarded by AST rules.",
+        "Send the complete new file content (e.g. write_file), or an edit whose old text "
+        "matches the file exactly, so the change can be verified.",
+    )
