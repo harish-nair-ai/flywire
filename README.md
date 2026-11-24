@@ -6,7 +6,7 @@ A local proxy that checks every coding-agent tool call against a code-aware "fli
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 [![CI](https://github.com/harish-nair-ai/flywire/actions/workflows/ci.yml/badge.svg)](https://github.com/harish-nair-ai/flywire/actions/workflows/ci.yml)
 
-[![Watch the 90-second explainer](assets/hero.gif)](assets/explainer.mp4)
+[![Watch the 95-second explainer](assets/hero.gif)](assets/explainer.mp4)
 
 ▶ Watch the full narrated explainer ([assets/explainer.mp4](assets/explainer.mp4))
 
