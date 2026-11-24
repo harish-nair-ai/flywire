@@ -16,7 +16,7 @@ from conftest import write
 
 FLYWIRE = str(Path(sys.executable).parent / "flywire")
 MOCK = str(Path(__file__).parent / "mock_mcp_server.py")
-AUTH_TEST = 'def test_login():\n    assert a()\n    assert b()\n    assert c()\n'
+AUTH_TEST = "def test_login():\n    assert a()\n    assert b()\n    assert c()\n"
 
 
 class Wrapped:
@@ -78,6 +78,8 @@ class Wrapped:
         return self.log.read_bytes().splitlines(keepends=True) if self.log.exists() else []
 
     def mock_alive(self) -> bool:
+        if not self.pidfile.exists():  # terminated before it finished starting
+            return False
         try:
             os.kill(int(self.pidfile.read_text()), 0)
         except ProcessLookupError:
@@ -115,10 +117,14 @@ def test_passthrough_intercept_and_allow(wrapped: Any, repo: Path) -> None:
     w.send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     assert [t["name"] for t in w.recv()["result"]["tools"]] == ["write_file", "run_command"]
 
-    forbidden = w.call("req-7", "write_file", {
-        "path": "tests/test_auth.py",
-        "content": AUTH_TEST.replace("    assert b()\n", ""),
-    })  # fmt: skip
+    forbidden = w.call(
+        "req-7",
+        "write_file",
+        {
+            "path": "tests/test_auth.py",
+            "content": AUTH_TEST.replace("    assert b()\n", ""),
+        },
+    )
     assert forbidden["id"] == "req-7"  # original JSON type echoed
     assert forbidden["result"]["isError"] is True
     text = forbidden["result"]["content"][0]["text"]
@@ -127,7 +133,11 @@ def test_passthrough_intercept_and_allow(wrapped: Any, repo: Path) -> None:
     assert (repo / "tests/test_auth.py").read_text() == AUTH_TEST  # never reached upstream
 
     ok = w.call(3, "write_file", {"path": "src/new.py", "content": "x = 1\n"})
-    assert ok == {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "ok"}]}}
+    assert ok == {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {"content": [{"type": "text", "text": "ok"}]},
+    }
     assert (repo / "src/new.py").read_text() == "x = 1\n"
 
     code, stderr = w.close()
@@ -145,7 +155,9 @@ def test_shell_results_feed_victory_gate(wrapped: Any, repo: Path) -> None:
     w = wrapped()
     assert "result" in w.call(1, "write_file", {"path": "src/calc.py", "content": "x = 1\n"})
     blocked = w.call(2, "run_command", {"command": "git commit -m x"})
-    assert blocked["result"]["content"][0]["text"].startswith("[FLYWIRE: victory-unverified-commit]")
+    assert blocked["result"]["content"][0]["text"].startswith(
+        "[FLYWIRE: victory-unverified-commit]"
+    )
     write(repo, "tests/test_ok.py", "def test_ok():\n    assert True\n")
     passed = w.call(3, "run_command", {"command": f"pytest -q -p no:cacheprovider {repo}/tests"})
     assert passed["result"]["structuredContent"]["exit_code"] == 0
@@ -155,7 +167,9 @@ def test_shell_results_feed_victory_gate(wrapped: Any, repo: Path) -> None:
     assert commit["result"]["structuredContent"]["exit_code"] == 0
     assert w.close()[0] == 0
     conn = sqlite3.connect(repo / ".flywire/flight_log.db")
-    rows = conn.execute("SELECT exit_code FROM tool_events WHERE op_class != 'FILE_WRITE'").fetchall()
+    rows = conn.execute(
+        "SELECT exit_code FROM tool_events WHERE op_class != 'FILE_WRITE'"
+    ).fetchall()
     conn.close()
     assert rows == [(None,), (0,), (0,), (0,)]  # the steered commit never executed
 
@@ -179,8 +193,14 @@ def test_mode_flag_overrides_config(wrapped: Any) -> None:
 
 def test_child_exit_code_is_propagated(wrapped: Any) -> None:
     w = wrapped()
-    w.send({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-            "params": {"name": "crash", "arguments": {"code": 7}}})  # fmt: skip
+    w.send(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "crash", "arguments": {"code": 7}},
+        }
+    )
     assert w.proc.wait(15) == 7
 
 
@@ -199,10 +219,14 @@ def test_sigterm_cleans_up_child(wrapped: Any) -> None:
 def test_batched_tools_call_is_rejected(wrapped: Any) -> None:
     w = wrapped()
     batch = [
-        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-         "params": {"name": "write_file", "arguments": {"path": "a.py", "content": "x"}}},
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "write_file", "arguments": {"path": "a.py", "content": "x"}},
+        },
         {"jsonrpc": "2.0", "method": "notifications/initialized"},
-    ]  # fmt: skip
+    ]
     assert w.proc.stdin is not None
     w.proc.stdin.write(json.dumps(batch).encode() + b"\n")
     assert w.recv() == [

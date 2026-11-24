@@ -48,15 +48,23 @@ class Servers:
             "MOCK_LOG": str(self.log),
             "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
         }
-        self.upstream = subprocess.Popen([sys.executable, MOCK, str(self.up_port)], cwd=root, env=env)
+        self.upstream = subprocess.Popen(
+            [sys.executable, MOCK, str(self.up_port)], cwd=root, env=env
+        )
         wait_port(self.up_port, self.upstream)
         self.proxy = subprocess.Popen(
-            [FLYWIRE, "serve", "--upstream", f"http://127.0.0.1:{self.up_port}",
-             "--port", str(self.port)],
+            [
+                FLYWIRE,
+                "serve",
+                "--upstream",
+                f"http://127.0.0.1:{self.up_port}",
+                "--port",
+                str(self.port),
+            ],
             cwd=root,
             env=env,
             stderr=subprocess.PIPE,
-        )  # fmt: skip
+        )
         wait_port(self.port, self.proxy)
         self.url = f"http://127.0.0.1:{self.port}/mcp"
 
@@ -64,8 +72,12 @@ class Servers:
         return httpx.post(self.url, json=frame, headers=SSE_HEADERS, timeout=15)
 
     def call(self, mid: Any, name: str, args: dict[str, Any]) -> dict[str, Any]:
-        frame = {"jsonrpc": "2.0", "id": mid, "method": "tools/call",
-                 "params": {"name": name, "arguments": args}}  # fmt: skip
+        frame = {
+            "jsonrpc": "2.0",
+            "id": mid,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+        }
         resp = self.post(frame)
         if resp.headers["content-type"].startswith("text/event-stream"):
             data = [ln[6:] for ln in resp.text.splitlines() if ln.startswith("data: ")]
@@ -73,7 +85,9 @@ class Servers:
         return dict(resp.json())
 
     def upstream_bodies(self) -> list[dict[str, Any]]:
-        return [json.loads(x) for x in self.log.read_text().splitlines()] if self.log.exists() else []
+        return (
+            [json.loads(x) for x in self.log.read_text().splitlines()] if self.log.exists() else []
+        )
 
     def stop(self) -> tuple[int, str]:
         self.proxy.send_signal(signal.SIGINT)
@@ -102,14 +116,21 @@ def test_passthrough_intercept_allow(servers: Servers, repo: Path) -> None:
     assert init.headers["mcp-session-id"] == "s-1"  # upstream headers relayed
     assert init.json()["result"]["serverInfo"]["name"] == "h"
 
-    blocked = servers.call("b-1", "write_file",
-                           {"path": "tests/test_auth.py", "content": "def test_a():\n    assert x\n"})  # fmt: skip
+    blocked = servers.call(
+        "b-1",
+        "write_file",
+        {"path": "tests/test_auth.py", "content": "def test_a():\n    assert x\n"},
+    )
     assert blocked["id"] == "b-1"
     assert blocked["result"]["isError"] is True
     assert blocked["result"]["content"][0]["text"].startswith("[FLYWIRE: py-no-deleted-assertions]")
 
     ok = servers.call(2, "write_file", {"path": "src/a.py", "content": "a = 1\n"})
-    assert ok == {"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "ok"}]}}
+    assert ok == {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {"content": [{"type": "text", "text": "ok"}]},
+    }
     assert (repo / "src/a.py").read_text() == "a = 1\n"
     assert [b.get("id") for b in servers.upstream_bodies()] == [1, 2]
 
@@ -145,8 +166,14 @@ def test_sse_is_streamed_chunk_by_chunk(servers: Servers) -> None:
 
 
 def test_batched_tools_call_rejected(servers: Servers) -> None:
-    batch = [{"jsonrpc": "2.0", "id": 9, "method": "tools/call",
-              "params": {"name": "write_file", "arguments": {"path": "b.py", "content": "x"}}}]  # fmt: skip
+    batch = [
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {"name": "write_file", "arguments": {"path": "b.py", "content": "x"}},
+        }
+    ]
     resp = servers.post(batch)
     assert resp.json() == [
         {

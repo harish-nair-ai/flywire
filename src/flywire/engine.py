@@ -116,7 +116,8 @@ class EnvelopeEngine:
                 if intent.post_bytes is not None:
                     deleted = scope_guard.lines_deleted(intent.pre_bytes, intent.post_bytes)
                     yield scope_guard.mass_deletion(deleted, env.scope.max_lines_deleted_per_turn)
-                yield scope_guard.blast_radius(self._modified, rel, env.scope.max_files_modified)
+                distinct = len(self._modified | {rel})
+                yield scope_guard.blast_radius(distinct, env.scope.max_files_modified)
                 if intent.post_bytes is not None:
                     yield evaluate_ast(
                         self.config.ast_rules, rel, intent.pre_bytes, intent.post_bytes

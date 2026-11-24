@@ -65,7 +65,9 @@ def test_wrap_emits_steered_and_allowed_steps(repo: Path) -> None:
     bad = AUTH_TEST.replace("    assert b()\n", "")
     steered = w.call(1, "write_file", {"path": "tests/test_auth.py", "content": bad})
     feedback = steered["result"]["content"][0]["text"]
-    ok = w.call(2, "write_file", {"path": "src/ok.py", "content": "token = 'sk-" + "z" * 24 + "'\n"})
+    ok = w.call(
+        2, "write_file", {"path": "src/ok.py", "content": "token = 'sk-" + "z" * 24 + "'\n"}
+    )
     assert "result" in ok
     failing = w.call(3, "run_command", {"command": "exit 4"})
     assert failing["result"]["structuredContent"]["exit_code"] == 4
@@ -74,8 +76,11 @@ def test_wrap_emits_steered_and_allowed_steps(repo: Path) -> None:
     tape = only_tape(repo)
     assert not Path(f"{tape}-wal").exists() and not Path(f"{tape}-shm").exists()
     assert (repo / ".git/index").read_bytes() == index_before
-    meta = tape_rows(tape, "SELECT schema_version, command_argv, repo_root, base_commit_sha, "
-                           "parent_tape_id, metadata_json FROM tape_meta")  # fmt: skip
+    meta = tape_rows(
+        tape,
+        "SELECT schema_version, command_argv, repo_root, base_commit_sha, "
+        "parent_tape_id, metadata_json FROM tape_meta",
+    )
     assert len(meta) == 1
     version, argv, root, base, parent, metadata = meta[0]
     assert (version, json.loads(argv), root, base, parent) == (

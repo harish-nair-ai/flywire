@@ -48,6 +48,30 @@ def steer_response(request_id: Any, verdict: Verdict) -> bytes:
     return json.dumps(frame, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
+def batch_rejection(msg: object) -> bytes | None:
+    """Batches carrying tools/call are refused: they would bypass per-call steering
+    (MCP 2025-06-18 removed JSON-RPC batching). Other batches pass through untouched."""
+    if not isinstance(msg, list) or not any(
+        isinstance(m, dict) and m.get("method") == "tools/call" for m in msg
+    ):
+        return None
+    error = {"code": -32600, "message": "flywire: batched tools/call is not supported"}
+    replies = [
+        {"jsonrpc": "2.0", "id": m["id"], "error": error}
+        for m in msg
+        if isinstance(m, dict) and "id" in m and "method" in m
+    ]
+    return json.dumps(replies, separators=(",", ":")).encode("utf-8") + b"\n"
+
+
+def tool_result(exit_code: int, text: str) -> ToolResult:
+    return ToolResult(
+        exit_code=exit_code,
+        passed_count=sum(int(n) for n in PASSED_RE.findall(text)),
+        error_hash=error_hash(text) if exit_code != 0 else None,
+    )
+
+
 def result_text(msg: dict[str, Any]) -> str:
     error = msg.get("error")
     if isinstance(error, dict):
@@ -79,9 +103,4 @@ def extract_tool_result(msg: dict[str, Any]) -> ToolResult:
             exit_code = int(m.group(1))
         else:
             exit_code = 1 if result.get("isError") else 0
-    passed = sum(int(n) for n in PASSED_RE.findall(text))
-    return ToolResult(
-        exit_code=exit_code,
-        passed_count=passed,
-        error_hash=error_hash(text) if exit_code != 0 else None,
-    )
+    return tool_result(exit_code, text)

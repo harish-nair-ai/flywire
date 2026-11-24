@@ -36,7 +36,9 @@ def handle(msg: dict[str, object]) -> None:
             }
         )
     elif method == "tools/list":
-        tools = [{"name": n, "inputSchema": {"type": "object"}} for n in ("write_file", "run_command")]
+        tools = [
+            {"name": n, "inputSchema": {"type": "object"}} for n in ("write_file", "run_command")
+        ]
         send({"jsonrpc": "2.0", "id": mid, "result": {"tools": tools}})
     elif method == "tools/call":
         params = msg["params"]
@@ -46,7 +48,13 @@ def handle(msg: dict[str, object]) -> None:
             path = Path(args["path"])
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(args["content"])
-            send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": "ok"}]}})
+            send(
+                {
+                    "jsonrpc": "2.0",
+                    "id": mid,
+                    "result": {"content": [{"type": "text", "text": "ok"}]},
+                }
+            )
         elif name == "run_command":
             proc = subprocess.run(args["command"], shell=True, capture_output=True, text=True)
             send(

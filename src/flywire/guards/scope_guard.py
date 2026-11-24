@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Set
 
 import pathspec
 
@@ -55,11 +54,11 @@ def mass_deletion(deleted: int, limit: int) -> Verdict | None:
     )
 
 
-def blast_radius(modified: Set[str], rel_path: str, limit: int) -> Verdict | None:
-    if rel_path in modified or len(modified) + 1 <= limit:
+def blast_radius(distinct_files: int, limit: int) -> Verdict | None:
+    if distinct_files <= limit:
         return None
     return _steer(
         "scope-blast-radius",
-        f"This edit would modify {len(modified) + 1} distinct files (limit {limit}).",
+        f"This change modifies {distinct_files} distinct files (limit {limit}).",
         "Finish and verify the current change before touching more files.",
     )
