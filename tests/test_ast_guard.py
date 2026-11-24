@@ -230,3 +230,25 @@ def test_engine_acceptance_broken_syntax(make_engine: Callable[..., EnvelopeEngi
     write(engine.root, "tests/test_auth.py", AUTH_TEST.decode())
     broken = {"path": "tests/test_auth.py", "content": "def test_login(:\n"}
     assert engine.evaluate("write_file", broken).action == "ALLOW"
+
+
+def test_combined_query_counts_equal_per_rule_counts(rules: tuple[CompiledAstRule, ...]) -> None:
+    """The single-walk combined query must give exactly the contract count_captures result."""
+    from flywire.guards.ast_guard import EXT_TO_LANG, PARSERS, prefix_captures
+
+    assert prefix_captures('((comment) @t (#match? @t "@ts-x"))', "r0__") == (
+        '((comment) @r0__t (#match? @r0__t "@ts-x"))'
+    )
+    for _, path, pre, positive, negative in CASES:
+        grammar = EXT_TO_LANG[Path(path).suffix]
+        scoped = tuple(r for r in rules if grammar in r.queries)
+        combined = Query(
+            LANG_REGISTRY[grammar],
+            "\n".join(prefix_captures(r.rule.query, f"r{i}__") for i, r in enumerate(scoped)),
+        )
+        for source in (pre, positive, negative):
+            root = PARSERS[grammar].parse(source).root_node
+            caps = QueryCursor(combined).captures(root)
+            for i, r in enumerate(scoped):
+                single = QueryCursor(r.queries[grammar]).captures(root).get(r.rule.capture, [])
+                assert len(caps.get(f"r{i}__{r.rule.capture}", [])) == len(single), r.rule.id
