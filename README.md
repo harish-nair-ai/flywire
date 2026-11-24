@@ -4,7 +4,7 @@ A local proxy that checks every coding-agent tool call against a code-aware "fli
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-200%20passed-brightgreen)
+[![CI](https://github.com/harish-nair-ai/flywire/actions/workflows/ci.yml/badge.svg)](https://github.com/harish-nair-ai/flywire/actions/workflows/ci.yml)
 
 ---
 
