@@ -1,0 +1,54 @@
+# flywire v0.1 built-in TypeScript/TSX AST rules (spec §5.2).
+# language = "typescript" covers .ts and .tsx (contract D2).
+
+[[ast_rules]]
+id = "ts-no-deleted-expects"
+language = "typescript"
+paths = ["**/*.test.ts*", "**/*.spec.ts*"]
+check = "node_count_decreased"
+query = '''(call_expression function: (identifier) @fn (#eq? @fn "expect")) @target'''
+severity = "steer"
+message = "`expect(...)` assertions were removed from a test file."
+remediation = "Restore the deleted expectations and fix the code under test instead."
+
+[[ast_rules]]
+id = "ts-no-skipped-tests"
+language = "typescript"
+paths = ["**/*.test.ts*", "**/*.spec.ts*"]
+check = "new_node_introduced"
+query = '''(member_expression property: (property_identifier) @p (#match? @p "^(skip|only)$")) @target'''
+severity = "steer"
+message = "A test was skipped or focused with `.skip` / `.only`."
+remediation = "Remove `.skip` / `.only` and make the full test suite pass."
+
+[[ast_rules]]
+id = "ts-no-ts-ignore"
+language = "typescript"
+paths = ["**/*.ts", "**/*.tsx"]
+check = "new_node_introduced"
+query = '''((comment) @target (#match? @target "@ts-(ignore|nocheck)"))'''
+severity = "steer"
+message = "A new `@ts-ignore` / `@ts-nocheck` directive was added."
+remediation = "Fix the type error instead of suppressing the compiler."
+
+# The spec prints `(predefined_type) @target (#eq? @target "any")`; ungrouped, tree-sitter
+# does not attach the predicate (it then captures `string`, `number`, ...). Grouped form below.
+[[ast_rules]]
+id = "ts-no-explicit-any"
+language = "typescript"
+paths = ["src/**/*.ts*"]
+check = "new_node_introduced"
+query = '''((predefined_type) @target (#eq? @target "any"))'''
+severity = "steer"
+message = "A new explicit `any` type was introduced."
+remediation = "Use a precise type or `unknown` with narrowing instead of `any`."
+
+[[ast_rules]]
+id = "ts-no-dangerously-set-html"
+language = "tsx"
+paths = ["**/*.tsx"]
+check = "new_node_introduced"
+query = '''(jsx_attribute (property_identifier) @target (#eq? @target "dangerouslySetInnerHTML"))'''
+severity = "steer"
+message = "`dangerouslySetInnerHTML` was introduced (XSS risk)."
+remediation = "Render text through JSX or sanitize the HTML with a vetted sanitizer first."

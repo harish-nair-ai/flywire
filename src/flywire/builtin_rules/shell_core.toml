@@ -1,0 +1,46 @@
+# flywire v0.1 built-in shell & git hygiene rules (spec §5.3, contract §1.2 / §2).
+# Patterns are Python `re`, applied with re.search to every shell unit (contract D4).
+
+[[shell_rules]]
+id = "sh-no-force-push"
+pattern = '^git\s+push\b(?=.*\s(?:--force(?:-with-lease)?(?:=\S*)?|-[a-zA-Z]*f[a-zA-Z]*|\+\S+)(?:\s|$))(?=.*\b(?:main|master)\b)'
+severity = "hard_block"
+message = "Force-push to main/master detected."
+remediation = "Push to a feature branch and open a pull request instead of rewriting main/master."
+
+# D5: --no-verify on commit/push; -n (incl. bundles like -nm) on commit only. Quoted
+# arguments are consumed as whole tokens so `-m "add -n flag"` does not fire.
+[[shell_rules]]
+id = "sh-no-skip-hooks"
+pattern = '''^git\s+(?:(?:commit|push)(?:\s+(?:"[^"]*"|'[^']*'|[^\s"']+))*?\s+--no-verify|commit(?:\s+(?:"[^"]*"|'[^']*'|[^\s"']+))*?\s+-[a-zA-Z]*n[a-zA-Z]*)(?=\s|$)'''
+severity = "steer"
+message = "Git hooks are being skipped (`--no-verify` / `-n`)."
+remediation = "Run the commit/push without skipping hooks and fix whatever the hooks report."
+
+[[shell_rules]]
+id = "sh-no-hard-reset"
+pattern = '^git\s+(reset\s+.*--hard|clean\s+.*-[a-zA-Z]*f[a-zA-Z]*d|clean\s+.*-[a-zA-Z]*d[a-zA-Z]*f)'
+severity = "hard_block"
+message = "Destructive git reset/clean detected."
+remediation = "Use `git stash` or targeted `git checkout -- <file>` instead."
+
+[[shell_rules]]
+id = "sh-no-destructive-rm"
+pattern = '''^(?:sudo\s+)?rm\s+(?=(?:.*\s)?(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?:\s|$))(?=(?:.*\s)?(?:-[a-zA-Z]*f[a-zA-Z]*|--force)(?:\s|$)).*?(?<=\s)["']?(?:/\*?|~/?\*?|\.\./?\*?|(?:\./)?\.git/?|\$HOME/?)["']?(?=\s|$)'''
+severity = "hard_block"
+message = "Recursive forced delete of /, ~, .., or .git detected."
+remediation = "Delete only specific paths inside the workspace."
+
+[[shell_rules]]
+id = "sh-no-pipe-to-shell"
+pattern = '\b(?:curl|wget)\b.*\|\s*(?:sudo\s+(?:-\S+\s+)*)?(?:\S*/)?(?:sh|bash|zsh)\b'
+severity = "hard_block"
+message = "Piping a downloaded script straight into a shell detected."
+remediation = "Download the script to a file, inspect it, then run it explicitly."
+
+[[shell_rules]]
+id = "sh-no-env-exfil"
+pattern = '''\b(?:curl|wget)\b.*(?:@|--upload-file[\s=]+|--post-file[\s=]+|\$\(\s*cat\s+|`\s*cat\s+)["']?\S*\.env\b|(?:\b(?:cat|head|tail|less|more)\b[^|]*\.env\b|\b(?:printenv|env)\b)[^|]*\|.*\b(?:curl|wget|nc|ncat)\b'''
+severity = "hard_block"
+message = "Sending .env secrets or environment variables to a network tool detected."
+remediation = "Never transmit secrets; reference variable names instead of their values."

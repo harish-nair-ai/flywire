@@ -1,0 +1,51 @@
+# flywire v0.1 built-in Python AST rules (spec §5.2).
+
+[[ast_rules]]
+id = "py-no-deleted-assertions"
+language = "python"
+paths = ["tests/**/*.py", "**/*_test.py", "**/test_*.py"]
+check = "node_count_decreased"
+query = '''[(assert_statement) @target (call function: (attribute attribute: (identifier) @fn (#match? @fn "^assert"))) @target]'''
+severity = "steer"
+message = "Test assertions were removed from a test file."
+remediation = "Restore the deleted assertions and fix the code under test instead."
+
+[[ast_rules]]
+id = "py-no-bare-except-pass"
+language = "python"
+paths = ["**/*.py"]
+check = "new_node_introduced"
+query = '''(except_clause (block (pass_statement)) @target)'''
+severity = "steer"
+message = "A new exception handler silently swallows errors with `pass`."
+remediation = "Handle the exception explicitly (log, re-raise, or recover) instead of `pass`."
+
+[[ast_rules]]
+id = "py-no-ssl-verify-false"
+language = "python"
+paths = ["**/*.py"]
+check = "new_node_introduced"
+query = '''(keyword_argument name: (identifier) @k (#eq? @k "verify") value: (false)) @target'''
+severity = "steer"
+message = "TLS certificate verification was disabled with `verify=False`."
+remediation = "Keep certificate verification on; configure a CA bundle if the certificate is private."
+
+[[ast_rules]]
+id = "py-no-shell-true"
+language = "python"
+paths = ["**/*.py"]
+check = "new_node_introduced"
+query = '''(keyword_argument name: (identifier) @k (#eq? @k "shell") value: (true)) @target'''
+severity = "steer"
+message = "A subprocess call with `shell=True` was introduced."
+remediation = "Pass an argument list without `shell=True` to avoid shell injection."
+
+[[ast_rules]]
+id = "py-no-lint-suppression"
+language = "python"
+paths = ["**/*.py"]
+check = "new_node_introduced"
+query = '''((comment) @target (#match? @target "(#\\s*noqa|#\\s*type:\\s*ignore)"))'''
+severity = "steer"
+message = "A new lint/type suppression comment (`# noqa` / `# type: ignore`) was added."
+remediation = "Fix the underlying lint or type error instead of suppressing it."
