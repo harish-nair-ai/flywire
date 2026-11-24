@@ -52,7 +52,32 @@ def _parse(model: type[M], data: dict[str, Any], origin: str) -> M:
     try:
         return model.model_validate(data)
     except ValidationError as exc:
-        raise ConfigError(f"{origin}: {exc}") from exc
+        raise ConfigError(f"{origin}: {describe(exc)}") from exc
+
+
+WORDING = (
+    ("Field required", "missing required key"),
+    ("Input should be", "must be"),
+    ("String should", "must"),
+    ("List should", "must"),
+)
+
+
+def describe(exc: ValidationError) -> str:
+    """`key.path: problem (got value)` per error, without pydantic model names or URLs."""
+    parts = []
+    for err in exc.errors(include_url=False):
+        loc = ".".join(str(p) for p in err["loc"]) or "(top level)"
+        if err["type"] == "extra_forbidden":
+            parts.append(f"{loc}: unknown key")
+            continue
+        msg = err["msg"].removeprefix("Value error, ")
+        for pydantic_text, human in WORDING:
+            msg = msg.replace(pydantic_text, human)
+        got = err.get("input")
+        suffix = "" if err["type"] == "missing" or isinstance(got, dict) else f" (got {got!r})"
+        parts.append(f"{loc}: {msg}{suffix}")
+    return "; ".join(parts)
 
 
 def _builtin_rule_files() -> list[RuleFile]:
