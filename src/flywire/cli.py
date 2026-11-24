@@ -224,7 +224,7 @@ def _changed_files(root: Path, base: str, staged: bool) -> list[tuple[str, bytes
         others = _git_bytes(root, "ls-files", "--others", "--exclude-standard", "-z") or b""
         names |= set(others.decode().split("\0"))
     out = []
-    for rel in sorted(n for n in names if n):
+    for rel in sorted(n for n in names if n and not n.startswith(".flywire/")):
         pre = _git_bytes(root, "cat-file", "blob", f"{base}:{rel}") or b""
         if staged:
             post = _git_bytes(root, "cat-file", "blob", f":{rel}") or b""

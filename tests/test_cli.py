@@ -114,6 +114,14 @@ def test_check_base_ref(project: Path) -> None:
     assert "src/app.py: [FLYWIRE: py-no-lint-suppression]" in proc.stdout
 
 
+def test_check_ignores_flywire_runtime_dir(project: Path) -> None:
+    # Installed packs (antigen fixtures with bad code) live in untracked .flywire/.
+    for i in range(20):
+        write(project, f".flywire/packs/core/p/evals/f{i}/positive_after.py", "x = 1  # noqa\n")
+    proc = run(project, "check", "--diff")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
 def test_check_untracked_deleted_and_protected(project: Path) -> None:
     write(project, "src/new.py", "try:\n    f()\nexcept Exception:\n    pass\n")
     (project / "tests/test_auth.py").unlink()
