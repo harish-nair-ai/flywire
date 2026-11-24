@@ -414,3 +414,12 @@ Markers (exact, each on its own line):
   ```
 - Package data (`builtin_rules/*.toml`, `starter_registry/**`) must ship in the wheel; verify via `uv build` + inspecting the wheel.
 - Each package commits its own `uv.lock`.
+
+---
+
+## 10. Security invariants (added after security review)
+- **Tapes are untrusted input** (they are shared artifacts). Readers MUST reject `tape_id`/`parent_tape_id` not matching `^[0-9a-f]{32}$` and `base_commit_sha`/`pre_tree_sha`/`post_tree_sha` not matching `^([0-9a-f]{40}|[0-9a-f]{64})$` (exit 2). These values reach git argv and generated Python source (`freeze`).
+- **`antibody.lock` is untrusted input** (committed, editable by any contributor). `installed[].install_path` MUST equal `.flywire/packs/<id>`; anything else is rejected at parse time, so `remove`/`sync` can never delete or replace other paths.
+- **Registry URLs** are passed to git after a `--` separator; git's default `protocol.allow` policy (no `ext::`) is relied on.
+- **Local HTTP proxies** (`flywire serve`, agent-rr LLM proxy) bind `127.0.0.1` only and answer 403 unless `Host` is `127.0.0.1`/`localhost`/`::1` and any `Origin` header is local too (MCP spec DNS-rebinding requirement).
+- **By design (not vulnerabilities):** `agent-rr bisect --check` and the commands after `--` in `record`/`fork`/`bisect`/`wrap` are run as given by the user; `antibody test` executes pack `evals/*.py` (only on explicit request; `pull` never does). Third-party pack regexes run in Python `re` without a timeout — install packs only from registries you trust.

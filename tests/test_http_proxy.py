@@ -196,3 +196,24 @@ def test_serve_invalid_config_exits_2(repo: Path) -> None:
     )
     assert proc.returncode == 2
     assert proc.stderr.startswith("error: ") and "Traceback" not in proc.stderr
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"host": "evil.example:8765"},  # DNS rebinding: browser sends the attacker's hostname
+        {"origin": "https://evil.example"},  # cross-site page posting to localhost
+    ],
+)
+def test_dns_rebinding_and_cross_origin_requests_are_refused(
+    servers: Servers, headers: dict[str, str]
+) -> None:
+    frame = {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "tools/call",
+        "params": {"name": "write_file", "arguments": {"path": "src/x.py", "content": "x=1\n"}},
+    }
+    r = httpx.post(servers.url, json=frame, headers={**SSE_HEADERS, **headers}, timeout=15)
+    assert r.status_code in (400, 403)
+    assert servers.upstream_bodies() == []

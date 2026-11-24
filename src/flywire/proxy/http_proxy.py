@@ -6,6 +6,7 @@ import json
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 import httpx
 from starlette.applications import Starlette
@@ -20,6 +21,16 @@ from flywire.proxy.session import ProxySession, id_key
 from flywire.store.tape import TapeWriter
 
 # Hop-by-hop headers, plus length/encoding: the body is re-chunked and relayed decoded.
+LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _is_local_request(request: Request) -> bool:
+    """MCP spec: validate Host/Origin so a web page can't reach this proxy via DNS rebinding."""
+    host = urlsplit("//" + request.headers.get("host", "")).hostname
+    origin = request.headers.get("origin")
+    return host in LOCAL_HOSTS and (origin is None or urlsplit(origin).hostname in LOCAL_HOSTS)
+
+
 DROP_HEADERS = frozenset(
     {
         "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te",
@@ -103,6 +114,8 @@ def create_app(engine: EnvelopeEngine, upstream: str, tape: TapeWriter | None) -
         print(session.summary(), file=sys.stderr, flush=True)
 
     async def proxy(request: Request) -> Response:
+        if not _is_local_request(request):
+            return Response("forbidden: non-local Host or Origin", status_code=403)
         body = await request.body()
         msg = _loads(body) if request.method == "POST" else None
         if (rejection := batch_rejection(msg)) is not None:
