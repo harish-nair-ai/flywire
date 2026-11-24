@@ -152,6 +152,23 @@ def test_agent_rr_tape_path_is_shared(repo: Path, tmp_path: Path) -> None:
     assert not (repo / ".flywire/tapes").exists()
 
 
+def test_tape_inside_repo_is_excluded_from_snapshots(repo: Path) -> None:
+    tape = repo / "run.tape"
+    write(repo, "envelope.toml", TAPE_ENV)
+    os.environ["AGENT_RR_TAPE_PATH"] = str(tape)
+    try:
+        w = Wrapped(repo)
+    finally:
+        del os.environ["AGENT_RR_TAPE_PATH"]
+    w.call(1, "write_file", {"path": "src/a.py", "content": "x = 1\n"})
+    w.call(2, "write_file", {"path": "src/b.py", "content": "y = 1\n"})
+    assert w.close()[0] == 0
+    trees = tape_rows(tape, "SELECT pre_tree_sha, post_tree_sha FROM steps")
+    assert len(trees) == 2
+    for tree in {t for row in trees for t in row}:
+        assert "run.tape" not in git(repo, "ls-tree", "-r", "--name-only", tree)
+
+
 @pytest.mark.parametrize("commits", [False, True])
 def test_no_git_or_no_commits_disables_tape_with_one_warning(tmp_path: Path, commits: bool) -> None:
     root = tmp_path / "ws"
