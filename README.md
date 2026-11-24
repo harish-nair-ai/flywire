@@ -236,7 +236,7 @@ packs: core/python-safety (not installed), core/git-hygiene (not installed)
 no interventions recorded
 ```
 
-The starter `envelope.toml` lists two antibody packs. They are optional: flywire warns and runs with its 16 built-in rules. (`antibody pull core/python-safety` installs them; see [antibody](https://github.com/harish-nair-ai/antibody).)
+Run `flywire init` before `antibody pull`: if a pull already created a minimal `envelope.toml`, `init` exits 2 and tells you to run `flywire init --force`, which keeps the pulled packs. The starter `envelope.toml` lists two antibody packs. They are optional: flywire warns and runs with its 16 built-in rules. (`antibody pull core/python-safety` installs them; see [antibody](https://github.com/harish-nair-ai/antibody).)
 
 **4. Send three calls**: one that deletes the assertions, one harmless edit, and one `curl | sh`.
 
@@ -297,7 +297,7 @@ All commands find the workspace root by walking up from the current directory to
 
 ### `flywire init [--lang python|ts] [--force]`
 
-Writes a commented starter `envelope.toml` (the full file is shown in the [config reference](#configuration-reference-envelopetoml)) and `.flywire/.gitignore` (ignores `flight_log.db*`, `tapes/`, `.tmp/`). `--lang ts` lists `core/typescript-safety` instead of `core/python-safety`. Refuses to overwrite an existing `envelope.toml` (exit 2) unless `--force` is given.
+Writes a commented starter `envelope.toml` (the full file is shown in the [config reference](#configuration-reference-envelopetoml)) and `.flywire/.gitignore` (ignores `flight_log.db*`, `tapes/`, `.tmp/`). `--lang ts` lists `core/typescript-safety` instead of `core/python-safety`. Refuses to overwrite an existing `envelope.toml` (exit 2) unless `--force` is given. `--force` keeps the `packs` already listed in the old file, so running `flywire init --force` after `antibody pull` (which creates a minimal `envelope.toml`) loses nothing.
 
 ### `flywire wrap [--mode audit|steer|strict] -- <cmd...>`
 

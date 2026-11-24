@@ -66,6 +66,23 @@ def test_init_creates_files_and_never_overwrites(repo: Path) -> None:
     assert not list(repo.glob("*.tmp")) and not list(repo.glob("tmp*"))
 
 
+def test_init_after_antibody_pull_is_actionable_and_force_keeps_packs(repo: Path) -> None:
+    envelope = repo / "envelope.toml"
+    pulled = '[envelope]\nversion = "0.1"\npacks = ["core/python-safety", "core/x-y"]\n'
+    envelope.write_text(pulled)  # what `antibody pull` writes when no envelope exists
+    refused = run(repo, "init")
+    assert_clean_error(refused, 2)
+    assert "flywire init --force" in refused.stderr and "packs" in refused.stderr
+    assert envelope.read_text() == pulled
+    assert run(repo, "init", "--force").returncode == 0
+    assert load_config(repo).envelope.envelope.packs == (
+        "core/python-safety",
+        "core/x-y",
+        "core/git-hygiene",
+    )
+    assert "emit_tape = false" in envelope.read_text()
+
+
 def test_init_rejects_unknown_lang(tmp_path: Path) -> None:
     assert run(tmp_path, "init", "--lang", "cobol").returncode == 2
     assert not (tmp_path / "envelope.toml").exists()
