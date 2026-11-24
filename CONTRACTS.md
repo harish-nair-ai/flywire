@@ -267,11 +267,12 @@ Rules:
 tmp_idx = mkstemp(dir=tempfile.gettempdir()); os.close; os.unlink   # fresh index
 env = {**os.environ, "GIT_INDEX_FILE": tmp_idx}
 git read-tree HEAD                                  (env)
-git add -A -- . ':!.agent-rr' ':!.flywire' [T]      (env)
+git add -A -- . ':!.agent-rr' ':!.flywire'          (env)
+[T] git rm --cached -q --ignore-unmatch -- <tape pathspecs>   (env)
 sha = git write-tree                                (env)  -> 40-hex
 finally: unlink tmp_idx (and tmp_idx + ".lock" if present)
 ```
-`[T]`: when the tape being written lies inside the repo, `':(exclude,literal)<rel>'` for `<rel>` and `<rel>-wal`/`-shm`/`-journal` (the tape must never snapshot itself). Never touches `.git/index`, HEAD, or refs. Repo with no commits → actionable error (`error: repository has no commits; make an initial commit first`, exit 2).
+`[T]`: only when the tape being written lies inside the repo; pathspecs `':(literal)<rel>'` for `<rel>` and `<rel>-wal`/`-shm`/`-journal` (the tape must never snapshot itself; an exclude pathspec would make `git add` fail when the tape path is gitignored). Never touches `.git/index`, HEAD, or refs. Repo with no commits → actionable error (`error: repository has no commits; make an initial commit first`, exit 2).
 
 ### 6.2 flywire tape emission (`emit_tape = true`)
 - Tape path: `$AGENT_RR_TAPE_PATH` if set, else `<root>/.flywire/tapes/<session_id>.tape`. Meta (if new): `command_argv` = wrapped upstream argv, `metadata_json={"producer":"flywire","session_id":...}`.

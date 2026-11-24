@@ -102,12 +102,12 @@ def _git(root: Path, *args: str, env: dict[str, str] | None = None) -> str:
     ).stdout.strip()
 
 
-def _tape_excludes(root: Path, tape: Path | None) -> list[str]:
-    """Pathspecs excluding the tape being written (and its SQLite sidecars) if inside root."""
+def _tape_paths(root: Path, tape: Path | None) -> list[str]:
+    """Literal pathspecs of the tape being written and its SQLite sidecars, if inside root."""
     if tape is None or not tape.resolve().is_relative_to(root.resolve()):
         return []
     rel = tape.resolve().relative_to(root.resolve()).as_posix()
-    return [f":(exclude,literal){rel}{suffix}" for suffix in ("", "-wal", "-shm", "-journal")]
+    return [f":(literal){rel}{suffix}" for suffix in ("", "-wal", "-shm", "-journal")]
 
 
 def snapshot_tree(root: Path, tape: Path | None = None) -> str:
@@ -116,10 +116,12 @@ def snapshot_tree(root: Path, tape: Path | None = None) -> str:
     os.close(fd)
     os.unlink(index)
     env = {**os.environ, "GIT_INDEX_FILE": index}
-    excludes = [":!.agent-rr", ":!.flywire", *_tape_excludes(root, tape)]
+    tape_paths = _tape_paths(root, tape)
     try:
         _git(root, "read-tree", "HEAD", env=env)
-        _git(root, "add", "-A", "--", ".", *excludes, env=env)
+        _git(root, "add", "-A", "--", ".", ":!.agent-rr", ":!.flywire", env=env)
+        if tape_paths:  # unstaged after the add: an exclude pathspec fails if git ignores it
+            _git(root, "rm", "--cached", "-q", "--ignore-unmatch", "--", *tape_paths, env=env)
         return _git(root, "write-tree", env=env)
     finally:
         for leftover in (index, index + ".lock"):
